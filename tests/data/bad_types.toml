@@ -1,0 +1,5 @@
+package = 42
+repository = "https://registry.npmjs.org"
+test_mode = "yes"
+ascii_tree = 1
+filter_substring = false
