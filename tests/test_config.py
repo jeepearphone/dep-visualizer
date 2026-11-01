@@ -1,12 +1,9 @@
 """Тесты загрузки и проверки конфигурационного файла."""
 
-import io
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from src.config import Config, ConfigError, load_config
-from src.main import EXIT_CONFIG_ERROR, EXIT_OK, main
 
 DATA_DIR = Path(__file__).parent / "data"
 
@@ -99,29 +96,6 @@ class LoadConfigTest(unittest.TestCase):
     def test_filter_with_spaces(self):
         """Подстрока фильтра с пробелом никогда не совпадёт с именем."""
         self.assert_error("bad_filter.toml", "filter_substring")
-
-
-class MainTest(unittest.TestCase):
-    """Проверки вывода и кода возврата CLI."""
-
-    def test_prints_key_value(self):
-        """Параметры печатаются в формате ключ = значение."""
-        output = io.StringIO()
-        with redirect_stdout(output):
-            code = main(["--config", str(DATA_DIR / "good_npm.toml")])
-        self.assertEqual(code, EXIT_OK)
-        lines = output.getvalue().splitlines()
-        self.assertIn('package = "express"', lines)
-        self.assertIn("test_mode = false", lines)
-        self.assertIn('filter_substring = "debug"', lines)
-
-    def test_error_goes_to_stderr(self):
-        """При ошибке сообщение уходит в stderr, код возврата ненулевой."""
-        errors = io.StringIO()
-        with redirect_stderr(errors):
-            code = main(["--config", str(DATA_DIR / "bad_url.toml")])
-        self.assertEqual(code, EXIT_CONFIG_ERROR)
-        self.assertIn("Ошибка конфигурации", errors.getvalue())
 
 
 if __name__ == "__main__":

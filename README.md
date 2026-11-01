@@ -14,6 +14,7 @@ npm-пакетов (практическая работа №2, вариант 1
 |------|------------|
 | `src/main.py` | точка входа, разбор аргументов командной строки |
 | `src/config.py` | загрузка и проверка конфигурации TOML |
+| `src/registry.py` | получение прямых зависимостей из npm registry |
 | `tests/` | модульные тесты (`unittest`) |
 | `tests/data/` | примеры корректных и ошибочных конфигураций |
 | `config.toml` | пример конфигурации |
@@ -55,7 +56,34 @@ filter_substring = "debug"
   папки, где лежит конфигурационный файл;
 - `filter_substring` не содержит пробельных символов.
 
-При ошибке все найденные проблемы выводятся в stderr, код возврата 1.
+При ошибке все найденные проблемы выводятся в stderr.
+
+## Получение зависимостей
+
+Для пакета запрашивается манифест последней версии:
+
+```
+GET {repository}/{package}/latest
+```
+
+У scoped-пакетов слеш кодируется: `@babel/core` → `@babel%2Fcore`.
+Из ответа (JSON) берётся поле `dependencies`, поля `devDependencies`,
+`peerDependencies` и `optionalDependencies` не учитываются. Запрос
+выполняется стандартным `urllib.request` с таймаутом 15 секунд.
+
+Обрабатываемые ошибки: пакет не найден (HTTP 404), другие HTTP-ошибки,
+отсутствие соединения, таймаут, ответ не в формате JSON, неверная
+структура ответа.
+
+Тестовый режим (`test_mode = true`) пока не поддерживается.
+
+### Коды возврата
+
+| Код | Значение |
+|-----|----------|
+| 0 | успешно |
+| 1 | ошибка конфигурации |
+| 2 | ошибка получения данных из registry |
 
 ## Запуск
 
@@ -63,13 +91,13 @@ Windows:
 
 ```bat
 run.bat
-run.bat --config tests\data\good_test_mode.toml
+run.bat --config путь\к\config.toml
 ```
 
 Linux / macOS:
 
 ```sh
-./run.sh --config tests/data/good_test_mode.toml
+./run.sh --config path/to/config.toml
 ```
 
 Напрямую: `python -m src.main --config config.toml`. Без `--config`
@@ -83,6 +111,9 @@ run.bat test
 python -m unittest discover -s tests -v
 ```
 
+Тесты registry не обращаются к сети: `urlopen` подменяется через
+`unittest.mock`.
+
 Проверка стиля (необязательно):
 
 ```sh
@@ -92,18 +123,42 @@ flake8 --max-line-length 80 --max-complexity 10 src tests
 
 ## Примеры
 
-Корректная конфигурация:
+Прямые зависимости `express`:
 
 ```
 > run.bat
-package = "express"
-repository = "https://registry.npmjs.org"
-test_mode = false
-ascii_tree = true
-filter_substring = "debug"
+Прямые зависимости express@5.3.0:
+  accepts ^2.0.0
+  body-parser ^2.3.0
+  content-disposition ^2.0.1
+  ...
+  type-is ^2.1.0
+  vary ^1.1.2
 ```
 
-Ошибки типов (`tests/data/bad_types.toml`):
+Scoped-пакет (`package = "@babel/core"`):
+
+```
+Прямые зависимости @babel/core@8.0.10:
+  @babel/code-frame ^8.0.6
+  @babel/generator ^8.0.10
+  ...
+```
+
+Пакет без зависимостей (`package = "ms"`):
+
+```
+Прямые зависимости ms@2.1.3:
+  (нет зависимостей)
+```
+
+Несуществующий пакет:
+
+```
+Ошибка получения данных: пакет не найден в registry: no-such-pkg-xyz-123456
+```
+
+Ошибки конфигурации (`tests/data/bad_types.toml`):
 
 ```
 > run.bat --config tests\data\bad_types.toml
@@ -112,16 +167,6 @@ package: ожидается строка, получено 42
 test_mode: ожидается логическое значение (true или false), получено "yes"
 ascii_tree: ожидается логическое значение (true или false), получено 1
 filter_substring: ожидается строка, получено false
-```
-
-Отсутствующие параметры (`tests/data/bad_missing_keys.toml`):
-
-```
-> run.bat --config tests\data\bad_missing_keys.toml
-Ошибка конфигурации:
-repository: параметр отсутствует
-ascii_tree: параметр отсутствует
-filter_substring: параметр отсутствует
 ```
 
 Другие ошибочные конфигурации лежат в `tests/data/bad_*.toml`.
