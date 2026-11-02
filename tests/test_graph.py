@@ -3,7 +3,15 @@
 import unittest
 from pathlib import Path
 
-from src.graph import build_graph, find_cycle_edges
+from src.graph import (
+    GraphError,
+    build_graph,
+    dependents_of,
+    depends_on_itself,
+    find_cycle_edges,
+    find_dependents,
+    reverse_edges,
+)
 from src.graph_file import load_graph_file, make_dependency_getter
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -101,6 +109,77 @@ class FindCycleEdgesTest(unittest.TestCase):
     def test_complex(self):
         """Цикл A -> C -> G -> A в большом графе."""
         self.assertEqual(self.cycles_of("complex.txt"), [("G", "A")])
+
+
+class ReverseEdgesTest(unittest.TestCase):
+    """Проверки разворота рёбер графа."""
+
+    def test_diamond(self):
+        """В ромбе от D зависят B и C, от B и C — A."""
+        graph = build_graph("A", getter_for("diamond.txt"))
+        self.assertEqual(
+            reverse_edges(graph.edges),
+            {"A": [], "B": ["A"], "C": ["A"], "D": ["B", "C"]},
+        )
+
+
+class FindDependentsTest(unittest.TestCase):
+    """Проверки поиска обратных зависимостей."""
+
+    def reverse_of(self, file_name, target, filter_substring=""):
+        """Построить граф из файла и найти обратные зависимости target."""
+        graph = build_graph("A", getter_for(file_name), filter_substring)
+        return find_dependents(graph, target)
+
+    def test_diamond_transitive(self):
+        """От D зависят B и C напрямую и A транзитивно."""
+        reverse_graph = self.reverse_of("diamond.txt", "D")
+        self.assertEqual(reverse_graph.root, "D")
+        self.assertEqual(dependents_of(reverse_graph), ["A", "B", "C"])
+
+    def test_linear(self):
+        """В цепочке от C зависят все предыдущие пакеты."""
+        reverse_graph = self.reverse_of("linear.txt", "C")
+        self.assertEqual(dependents_of(reverse_graph), ["A", "B"])
+
+    def test_root_has_no_dependents(self):
+        """От корня без циклов никто не зависит."""
+        reverse_graph = self.reverse_of("linear.txt", "A")
+        self.assertEqual(dependents_of(reverse_graph), [])
+        self.assertFalse(depends_on_itself(reverse_graph))
+
+    def test_cycle(self):
+        """В цикле пакет зависит от всех остальных и от самого себя."""
+        reverse_graph = self.reverse_of("cycle.txt", "A")
+        self.assertEqual(dependents_of(reverse_graph), ["B", "C"])
+        self.assertTrue(depends_on_itself(reverse_graph))
+
+    def test_self_loop(self):
+        """Самопетля: A зависит от себя, от B зависит A."""
+        self_graph = self.reverse_of("self_loop.txt", "A")
+        self.assertTrue(depends_on_itself(self_graph))
+        reverse_graph = self.reverse_of("self_loop.txt", "B")
+        self.assertEqual(dependents_of(reverse_graph), ["A"])
+        self.assertFalse(depends_on_itself(reverse_graph))
+
+    def test_complex_uses_dfs(self):
+        """Обратный граф строится тем же DFS: порядок обхода в глубину."""
+        reverse_graph = self.reverse_of("complex.txt", "E")
+        self.assertEqual(
+            list(reverse_graph.edges),
+            ["E", "B", "A", "G", "C", "H", "F", "D"],
+        )
+
+    def test_filter_removes_paths(self):
+        """С фильтром F путей H <- F <- B и H <- F <- C нет."""
+        reverse_graph = self.reverse_of("complex.txt", "H", "F")
+        self.assertEqual(dependents_of(reverse_graph), ["A", "C", "D", "G"])
+
+    def test_missing_target(self):
+        """Пакета нет в графе."""
+        graph = build_graph("A", getter_for("diamond.txt"))
+        with self.assertRaisesRegex(GraphError, "не входит в граф"):
+            find_dependents(graph, "Z")
 
 
 if __name__ == "__main__":

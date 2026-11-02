@@ -56,6 +56,30 @@ class TestModeTest(unittest.TestCase):
         self.assertEqual(code, EXIT_DATA_ERROR)
         self.assertIn("строка 2", errors)
 
+    def test_reverse_diamond(self):
+        """Режим обратных зависимостей вместо вывода графа."""
+        code, output, _ = run_main("reverse_diamond.toml")
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("D <- B, C", output)
+        self.assertIn("Зависят от D (пакетов: 3): A, B, C", output)
+        self.assertNotIn("Граф зависимостей", output)
+
+    def test_reverse_cycle(self):
+        """Пакет в цикле зависит сам от себя."""
+        _, output, _ = run_main("reverse_cycle.toml")
+        self.assertIn("A зависит сам от себя через цикл", output)
+
+    def test_reverse_root(self):
+        """От корня никто не зависит."""
+        _, output, _ = run_main("reverse_root.toml")
+        self.assertIn("не зависит ни один пакет", output)
+
+    def test_reverse_missing(self):
+        """Пакета для обратных зависимостей нет в графе."""
+        code, _, errors = run_main("reverse_missing.toml")
+        self.assertEqual(code, EXIT_DATA_ERROR)
+        self.assertIn("не входит в граф", errors)
+
     def test_config_error(self):
         """Ошибка конфигурации."""
         code, _, errors = run_main("bad_url.toml")

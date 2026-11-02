@@ -3,3 +3,4 @@ repository = "complex.txt"
 test_mode = true
 ascii_tree = false
 filter_substring = "F"
+reverse_for = ""

@@ -5,7 +5,14 @@ import sys
 from functools import partial
 
 from src.config import ConfigError, load_config
-from src.graph import build_graph, find_cycle_edges
+from src.graph import (
+    GraphError,
+    build_graph,
+    dependents_of,
+    depends_on_itself,
+    find_cycle_edges,
+    find_dependents,
+)
 from src.graph_file import (
     GraphFileError,
     load_graph_file,
@@ -69,7 +76,7 @@ def print_graph(graph):
     """Вывести рёбра графа, циклы и пакеты, исключённые фильтром."""
     print(f"Граф зависимостей {graph.root} (пакетов: {len(graph.edges)}):")
     for name, deps in graph.edges.items():
-        print(f"  {name} -> {', '.join(deps) if deps else '(нет)'}")
+        print(f"  {name} -> {', '.join(deps) or '(нет)'}")
     cycles = find_cycle_edges(graph)
     if cycles:
         print("Циклические зависимости (ребро, замыкающее цикл):")
@@ -81,8 +88,36 @@ def print_graph(graph):
         print(f"Исключены фильтром: {', '.join(sorted(graph.excluded))}")
 
 
+def print_dependents(graph, reverse_graph):
+    """Вывести обратные зависимости: кто зависит от заданного пакета."""
+    target = reverse_graph.root
+    print(f"Обратные зависимости {target} в графе {graph.root}")
+    print("(пакет <- пакеты, которые от него напрямую зависят):")
+    for name, dependents in reverse_graph.edges.items():
+        print(f"  {name} <- {', '.join(dependents) or '(нет)'}")
+    dependents = dependents_of(reverse_graph)
+    if dependents:
+        print(
+            f"Зависят от {target} (пакетов: {len(dependents)}): "
+            f"{', '.join(dependents)}"
+        )
+    else:
+        print(f"От {target} не зависит ни один пакет графа")
+    if depends_on_itself(reverse_graph):
+        print(f"{target} зависит сам от себя через цикл")
+
+
+def show_result(config, graph):
+    """Вывести граф или, если задан reverse_for, обратные зависимости."""
+    if config.reverse_for:
+        reverse_graph = find_dependents(graph, config.reverse_for)
+        print_dependents(graph, reverse_graph)
+    else:
+        print_graph(graph)
+
+
 def main(argv=None):
-    """Загрузить конфигурацию, построить граф зависимостей и вывести его."""
+    """Загрузить конфигурацию, построить граф и вывести результат."""
     args = parse_args(argv)
     try:
         config = load_config(args.config)
@@ -98,7 +133,11 @@ def main(argv=None):
         print(f"Ошибка получения данных: {error}", file=sys.stderr)
         return EXIT_DATA_ERROR
     end_progress(config)
-    print_graph(graph)
+    try:
+        show_result(config, graph)
+    except GraphError as error:
+        print(f"Ошибка: {error}", file=sys.stderr)
+        return EXIT_DATA_ERROR
     return EXIT_OK
 
 

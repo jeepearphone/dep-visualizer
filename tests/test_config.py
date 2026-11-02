@@ -28,8 +28,14 @@ class LoadConfigTest(unittest.TestCase):
             test_mode=False,
             ascii_tree=True,
             filter_substring="debug",
+            reverse_for="",
         )
         self.assertEqual(config, expected)
+
+    def test_good_reverse_config(self):
+        """Корректный конфиг с режимом обратных зависимостей."""
+        config = load_config(DATA_DIR / "reverse_diamond.toml")
+        self.assertEqual(config.reverse_for, "D")
 
     def test_good_test_mode_resolves_path(self):
         """В тестовом режиме путь считается от папки конфига."""
@@ -57,6 +63,7 @@ class LoadConfigTest(unittest.TestCase):
             "repository: параметр отсутствует",
             "ascii_tree: параметр отсутствует",
             "filter_substring: параметр отсутствует",
+            "reverse_for: параметр отсутствует",
         )
 
     def test_unknown_key(self):
@@ -71,6 +78,7 @@ class LoadConfigTest(unittest.TestCase):
             "test_mode: ожидается логическое",
             "ascii_tree: ожидается логическое",
             "filter_substring: ожидается строка",
+            "reverse_for: ожидается строка",
         )
 
     def test_empty_package(self):
@@ -100,6 +108,14 @@ class LoadConfigTest(unittest.TestCase):
     def test_filter_matches_root(self):
         """Фильтр, исключающий сам анализируемый пакет."""
         self.assert_error("bad_filter_root.toml", "анализируемого пакета")
+
+    def test_reverse_bad_name(self):
+        """Имя для обратных зависимостей проверяется как имя пакета."""
+        self.assert_error("bad_reverse_name.toml", "reverse_for: в тестовом")
+
+    def test_reverse_filtered(self):
+        """Пакет для обратных зависимостей исключён фильтром."""
+        self.assert_error("bad_reverse_filtered.toml", "исключается фильтром")
 
 
 if __name__ == "__main__":

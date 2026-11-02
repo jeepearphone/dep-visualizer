@@ -13,6 +13,7 @@ FIELD_TYPES = {
     "test_mode": bool,
     "ascii_tree": bool,
     "filter_substring": str,
+    "reverse_for": str,
 }
 
 TYPE_NAMES = {
@@ -45,6 +46,7 @@ class Config:
     test_mode: bool
     ascii_tree: bool
     filter_substring: str
+    reverse_for: str
 
     def items(self):
         """Вернуть пары (ключ, значение) в порядке объявления полей."""
@@ -114,27 +116,42 @@ def _check_types(data):
 def _check_values(data, base_dir):
     """Проверить значения параметров с учётом режима работы."""
     test_mode = data["test_mode"]
+    filter_substring = data["filter_substring"]
     return (
-        _check_package(data["package"], test_mode)
+        _check_name("package", data["package"], test_mode)
         + _check_repository(data["repository"], test_mode, base_dir)
-        + _check_filter(data["filter_substring"], data["package"])
+        + _check_filter(filter_substring, data["package"])
+        + _check_reverse(data["reverse_for"], test_mode, filter_substring)
     )
 
 
-def _check_package(name, test_mode):
+def _check_name(key, name, test_mode):
     """Проверить имя пакета: npm-имя или заглавные буквы в тестовом режиме."""
     if not name:
-        return ["package: имя пакета не может быть пустым"]
+        return [f"{key}: имя пакета не может быть пустым"]
     if len(name) > MAX_NAME_LENGTH:
-        return [f"package: имя длиннее {MAX_NAME_LENGTH} символов"]
+        return [f"{key}: имя длиннее {MAX_NAME_LENGTH} символов"]
     if test_mode and not TEST_NAME_PATTERN.match(name):
         return [
-            f"package: в тестовом режиме имя пакета состоит из заглавных "
+            f"{key}: в тестовом режиме имя пакета состоит из заглавных "
             f"латинских букв, получено {name!r}"
         ]
     if not test_mode and not NPM_NAME_PATTERN.match(name):
-        return [f"package: недопустимое имя npm-пакета {name!r}"]
+        return [f"{key}: недопустимое имя npm-пакета {name!r}"]
     return []
+
+
+def _check_reverse(name, test_mode, filter_substring):
+    """Проверить пакет для обратных зависимостей: "" отключает режим."""
+    if not name:
+        return []
+    errors = _check_name("reverse_for", name, test_mode)
+    if not errors and filter_substring and filter_substring in name:
+        errors.append(
+            f"reverse_for: пакет {name!r} исключается фильтром "
+            f"{filter_substring!r}"
+        )
+    return errors
 
 
 def _check_repository(value, test_mode, base_dir):

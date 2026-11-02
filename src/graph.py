@@ -6,6 +6,10 @@ IN_PROGRESS = "in_progress"
 FINISHED = "finished"
 
 
+class GraphError(Exception):
+    """Ошибка операции над графом зависимостей."""
+
+
 @dataclass
 class DependencyGraph:
     """Граф зависимостей, достижимых из корневого пакета.
@@ -72,3 +76,41 @@ def find_cycle_edges(graph):
             state[dep] = IN_PROGRESS
             stack.append((dep, iter(graph.edges.get(dep, []))))
     return cycle_edges
+
+
+def reverse_edges(edges):
+    """Развернуть рёбра: для каждого пакета — кто от него зависит."""
+    reversed_edges = {name: [] for name in edges}
+    for name, deps in edges.items():
+        for dep in deps:
+            reversed_edges.setdefault(dep, []).append(name)
+    return reversed_edges
+
+
+def find_dependents(graph, target):
+    """Найти пакеты графа, которые прямо или транзитивно зависят от target.
+
+    Рёбра графа разворачиваются, и по ним выполняется тот же обход в
+    глубину build_graph, что и при построении графа. Результат —
+    граф обратных зависимостей с корнем target.
+    """
+    if target not in graph.edges:
+        raise GraphError(
+            f"пакет {target} не входит в граф зависимостей {graph.root}"
+        )
+    reversed_edges = reverse_edges(graph.edges)
+    return build_graph(target, reversed_edges.__getitem__)
+
+
+def dependents_of(reverse_graph):
+    """Вернуть отсортированный список пакетов, зависящих от корня."""
+    return sorted(
+        name for name in reverse_graph.edges if name != reverse_graph.root
+    )
+
+
+def depends_on_itself(reverse_graph):
+    """Проверить, зависит ли корень от самого себя через цикл."""
+    return any(
+        reverse_graph.root in deps for deps in reverse_graph.edges.values()
+    )

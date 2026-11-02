@@ -3,3 +3,4 @@ repository = "https://registry.npmjs.org"
 test_mode = "yes"
 ascii_tree = 1
 filter_substring = false
+reverse_for = []
