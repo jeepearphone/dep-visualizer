@@ -1,0 +1,5 @@
+package = "A"
+repository = "cycle.txt"
+test_mode = true
+ascii_tree = false
+filter_substring = ""

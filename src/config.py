@@ -117,7 +117,7 @@ def _check_values(data, base_dir):
     return (
         _check_package(data["package"], test_mode)
         + _check_repository(data["repository"], test_mode, base_dir)
-        + _check_filter(data["filter_substring"])
+        + _check_filter(data["filter_substring"], data["package"])
     )
 
 
@@ -157,11 +157,16 @@ def _check_repository(value, test_mode, base_dir):
     return []
 
 
-def _check_filter(value):
+def _check_filter(value, package):
     """Проверить подстроку фильтра: пустая строка отключает фильтрацию."""
     if any(char.isspace() for char in value):
         return [
             f"filter_substring: имена пакетов не содержат пробелов, "
             f"получено {value!r}"
+        ]
+    if value and value in package:
+        return [
+            f"filter_substring: подстрока {value!r} содержится в имени "
+            f"анализируемого пакета {package!r}"
         ]
     return []

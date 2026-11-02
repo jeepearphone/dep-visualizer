@@ -11,6 +11,7 @@ from src.registry import (
     fetch_direct_deps,
     fetch_manifest,
     manifest_url,
+    real_package_name,
 )
 
 BASE_URL = "https://registry.npmjs.org"
@@ -132,6 +133,32 @@ class FetchManifestTest(unittest.TestCase):
         urlopen.return_value = json_response({"dependencies": ["a"]})
         with self.assertRaisesRegex(RegistryError, "неверный тип"):
             fetch_manifest(BASE_URL, "express")
+
+    def test_aliases_resolved(self, urlopen):
+        """Алиасы npm:имя@версия заменяются настоящими именами."""
+        urlopen.return_value = json_response({"dependencies": {
+            "string-width": "^5.1.2",
+            "string-width-cjs": "npm:string-width@^4.2.0",
+            "types-node": "npm:@types/node@^20.0.0",
+        }})
+        self.assertEqual(
+            fetch_direct_deps(BASE_URL, "cliui"),
+            ["string-width", "@types/node"],
+        )
+
+
+class RealPackageNameTest(unittest.TestCase):
+    """Проверки разбора алиасов."""
+
+    def test_plain_range(self):
+        """Обычный диапазон версий не меняет имя."""
+        self.assertEqual(real_package_name("debug", "^4.0.0"), "debug")
+
+    def test_alias_without_version(self):
+        """Алиас без версии."""
+        self.assertEqual(
+            real_package_name("x", "npm:@scope/pkg"), "@scope/pkg"
+        )
 
 
 if __name__ == "__main__":

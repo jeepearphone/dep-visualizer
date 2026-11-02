@@ -35,7 +35,7 @@ class LoadConfigTest(unittest.TestCase):
         """В тестовом режиме путь считается от папки конфига."""
         config = load_config(DATA_DIR / "good_test_mode.toml")
         self.assertTrue(config.test_mode)
-        self.assertEqual(Path(config.repository), DATA_DIR / "simple.txt")
+        self.assertEqual(Path(config.repository), DATA_DIR / "diamond.txt")
 
     def test_file_not_found(self):
         """Несуществующий файл конфигурации."""
@@ -96,6 +96,10 @@ class LoadConfigTest(unittest.TestCase):
     def test_filter_with_spaces(self):
         """Подстрока фильтра с пробелом никогда не совпадёт с именем."""
         self.assert_error("bad_filter.toml", "filter_substring")
+
+    def test_filter_matches_root(self):
+        """Фильтр, исключающий сам анализируемый пакет."""
+        self.assert_error("bad_filter_root.toml", "анализируемого пакета")
 
 
 if __name__ == "__main__":

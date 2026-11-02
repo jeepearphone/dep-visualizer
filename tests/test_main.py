@@ -6,70 +6,81 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from src.main import (
-    EXIT_CONFIG_ERROR,
-    EXIT_OK,
-    EXIT_REGISTRY_ERROR,
-    main,
-)
-from src.registry import Manifest, RegistryError
+from src.main import EXIT_CONFIG_ERROR, EXIT_DATA_ERROR, EXIT_OK, main
+from src.registry import RegistryError
 
 DATA_DIR = Path(__file__).parent / "data"
-NPM_CONFIG = str(DATA_DIR / "good_npm.toml")
+NPM_DEPS = {"express": ["accepts", "debug"], "accepts": [], "debug": []}
 
 
-def run_main(config_path):
-    """Запустить main и вернуть код возврата, stdout и stderr."""
+def run_main(file_name):
+    """Запустить main с конфигом из tests/data и вернуть код и вывод."""
     output, errors = io.StringIO(), io.StringIO()
     with redirect_stdout(output), redirect_stderr(errors):
-        code = main(["--config", config_path])
+        code = main(["--config", str(DATA_DIR / file_name)])
     return code, output.getvalue(), errors.getvalue()
 
 
-@patch("src.main.fetch_manifest")
-class MainTest(unittest.TestCase):
-    """Проверки сценариев запуска приложения."""
+class TestModeTest(unittest.TestCase):
+    """Запуск на тестовых репозиториях."""
 
-    def test_prints_direct_dependencies(self, fetch_manifest):
-        """Выводятся имя, версия и все прямые зависимости."""
-        fetch_manifest.return_value = Manifest(
-            "express", "5.1.0", {"accepts": "^2.0.0", "debug": "^4.4.0"}
-        )
-        code, output, _ = run_main(NPM_CONFIG)
+    def test_diamond(self):
+        """Ромб: все рёбра, циклов нет."""
+        code, output, _ = run_main("good_test_mode.toml")
         self.assertEqual(code, EXIT_OK)
-        self.assertIn("express@5.1.0", output)
-        self.assertIn("accepts ^2.0.0", output)
-        self.assertIn("debug ^4.4.0", output)
-        fetch_manifest.assert_called_once_with(
-            "https://registry.npmjs.org", "express"
-        )
+        self.assertIn("A -> B, C", output)
+        self.assertIn("D -> (нет)", output)
+        self.assertIn("Циклических зависимостей нет", output)
 
-    def test_no_dependencies(self, fetch_manifest):
-        """Пакет без зависимостей."""
-        fetch_manifest.return_value = Manifest("express", "1.0.0", {})
-        _, output, _ = run_main(NPM_CONFIG)
-        self.assertIn("нет зависимостей", output)
+    def test_cycle(self):
+        """Цикл выводится отдельно."""
+        _, output, _ = run_main("graph_cycle.toml")
+        self.assertIn("Циклические зависимости", output)
+        self.assertIn("C -> A", output)
 
-    def test_registry_error(self, fetch_manifest):
-        """Ошибка registry уходит в stderr со своим кодом возврата."""
-        fetch_manifest.side_effect = RegistryError("пакет не найден")
-        code, _, errors = run_main(NPM_CONFIG)
-        self.assertEqual(code, EXIT_REGISTRY_ERROR)
-        self.assertIn("пакет не найден", errors)
+    def test_filter(self):
+        """Исключённые пакеты перечисляются."""
+        _, output, _ = run_main("graph_complex_filter.toml")
+        self.assertIn("Исключены фильтром: F", output)
+        self.assertIn("B -> E\n", output)
 
-    def test_config_error(self, fetch_manifest):
-        """При ошибке конфигурации registry не запрашивается."""
-        code, _, errors = run_main(str(DATA_DIR / "bad_url.toml"))
+    def test_missing_root(self):
+        """Корневого пакета нет в тестовом репозитории."""
+        code, _, errors = run_main("graph_missing_root.toml")
+        self.assertEqual(code, EXIT_DATA_ERROR)
+        self.assertIn("не найден", errors)
+
+    def test_bad_graph_file(self):
+        """Ошибка формата тестового файла."""
+        code, _, errors = run_main("graph_bad_syntax.toml")
+        self.assertEqual(code, EXIT_DATA_ERROR)
+        self.assertIn("строка 2", errors)
+
+    def test_config_error(self):
+        """Ошибка конфигурации."""
+        code, _, errors = run_main("bad_url.toml")
         self.assertEqual(code, EXIT_CONFIG_ERROR)
         self.assertIn("Ошибка конфигурации", errors)
-        fetch_manifest.assert_not_called()
 
-    def test_test_mode_not_supported(self, fetch_manifest):
-        """Тестовый режим пока не поддерживается и сообщает об этом."""
-        code, _, errors = run_main(str(DATA_DIR / "good_test_mode.toml"))
-        self.assertEqual(code, EXIT_CONFIG_ERROR)
-        self.assertIn("Тестовый режим", errors)
-        fetch_manifest.assert_not_called()
+
+@patch("src.main.fetch_direct_deps")
+class RegistryModeTest(unittest.TestCase):
+    """Запуск с npm registry (сеть подменена)."""
+
+    def test_graph_with_filter(self, fetch_direct_deps):
+        """Фильтр из good_npm.toml убирает debug."""
+        fetch_direct_deps.side_effect = lambda url, name: NPM_DEPS[name]
+        code, output, _ = run_main("good_npm.toml")
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("express -> accepts", output)
+        self.assertIn("Исключены фильтром: debug", output)
+
+    def test_registry_error(self, fetch_direct_deps):
+        """Ошибка registry уходит в stderr со своим кодом возврата."""
+        fetch_direct_deps.side_effect = RegistryError("пакет не найден")
+        code, _, errors = run_main("good_npm.toml")
+        self.assertEqual(code, EXIT_DATA_ERROR)
+        self.assertIn("пакет не найден", errors)
 
 
 if __name__ == "__main__":

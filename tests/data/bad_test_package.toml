@@ -1,5 +1,5 @@
 package = "express"
-repository = "simple.txt"
+repository = "diamond.txt"
 test_mode = true
 ascii_tree = false
 filter_substring = ""

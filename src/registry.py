@@ -1,6 +1,7 @@
 """Получение прямых зависимостей пакета из npm registry по HTTP."""
 
 import json
+import re
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -12,6 +13,7 @@ REQUEST_HEADERS = {
     "Accept": "application/json",
     "User-Agent": "dep-visualizer",
 }
+ALIAS_PATTERN = re.compile(r"^npm:(@?[^@]+)")
 
 
 class RegistryError(Exception):
@@ -50,9 +52,23 @@ def fetch_manifest(base_url, name):
     )
 
 
+def real_package_name(name, version_range):
+    """Вернуть настоящее имя пакета с учётом алиаса «npm:имя@версия»."""
+    match = ALIAS_PATTERN.match(str(version_range))
+    return match.group(1) if match else name
+
+
 def fetch_direct_deps(base_url, name):
-    """Вернуть имена прямых зависимостей пакета (поле dependencies)."""
-    return list(fetch_manifest(base_url, name).dependencies)
+    """Вернуть имена прямых зависимостей пакета (поле dependencies).
+
+    Алиасы заменяются настоящими именами пакетов, повторы убираются.
+    """
+    dependencies = fetch_manifest(base_url, name).dependencies
+    names = (
+        real_package_name(dep, version_range)
+        for dep, version_range in dependencies.items()
+    )
+    return list(dict.fromkeys(names))
 
 
 def _fetch_json(url, name):
