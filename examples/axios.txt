@@ -1,0 +1,91 @@
+Описание графа на языке Graphviz (examples/axios.dot):
+digraph dependencies {
+    rankdir=LR;
+    node [shape=box, style=rounded, fontname=Helvetica];
+    "axios" [style="rounded,filled", fillcolor=lightblue];
+    "axios" -> "follow-redirects";
+    "axios" -> "form-data";
+    "axios" -> "https-proxy-agent";
+    "axios" -> "proxy-from-env";
+    "form-data" -> "asynckit";
+    "form-data" -> "combined-stream";
+    "form-data" -> "es-set-tostringtag";
+    "form-data" -> "hasown";
+    "form-data" -> "mime-types";
+    "combined-stream" -> "delayed-stream";
+    "es-set-tostringtag" -> "es-errors";
+    "es-set-tostringtag" -> "get-intrinsic";
+    "es-set-tostringtag" -> "has-tostringtag";
+    "es-set-tostringtag" -> "hasown";
+    "get-intrinsic" -> "call-bind-apply-helpers";
+    "get-intrinsic" -> "es-define-property";
+    "get-intrinsic" -> "es-errors";
+    "get-intrinsic" -> "es-object-atoms";
+    "get-intrinsic" -> "function-bind";
+    "get-intrinsic" -> "get-proto";
+    "get-intrinsic" -> "gopd";
+    "get-intrinsic" -> "has-symbols";
+    "get-intrinsic" -> "hasown";
+    "get-intrinsic" -> "math-intrinsics";
+    "call-bind-apply-helpers" -> "es-errors";
+    "call-bind-apply-helpers" -> "function-bind";
+    "es-object-atoms" -> "es-errors";
+    "get-proto" -> "dunder-proto";
+    "get-proto" -> "es-object-atoms";
+    "dunder-proto" -> "call-bind-apply-helpers";
+    "dunder-proto" -> "es-errors";
+    "dunder-proto" -> "gopd";
+    "hasown" -> "function-bind";
+    "has-tostringtag" -> "has-symbols";
+    "mime-types" -> "mime-db";
+    "https-proxy-agent" -> "agent-base";
+    "https-proxy-agent" -> "debug";
+    "https-proxy-agent" -> "proxy-agent-negotiate";
+    "debug" -> "ms";
+}
+
+ASCII-дерево зависимостей:
+axios
++-- follow-redirects
++-- form-data
+|   +-- asynckit
+|   +-- combined-stream
+|   |   `-- delayed-stream
+|   +-- es-set-tostringtag
+|   |   +-- es-errors
+|   |   +-- get-intrinsic
+|   |   |   +-- call-bind-apply-helpers
+|   |   |   |   +-- es-errors (повтор)
+|   |   |   |   `-- function-bind
+|   |   |   +-- es-define-property
+|   |   |   +-- es-errors (повтор)
+|   |   |   +-- es-object-atoms
+|   |   |   |   `-- es-errors (повтор)
+|   |   |   +-- function-bind (повтор)
+|   |   |   +-- get-proto
+|   |   |   |   +-- dunder-proto
+|   |   |   |   |   +-- call-bind-apply-helpers (повтор)
+|   |   |   |   |   +-- es-errors (повтор)
+|   |   |   |   |   `-- gopd
+|   |   |   |   `-- es-object-atoms (повтор)
+|   |   |   +-- gopd (повтор)
+|   |   |   +-- has-symbols
+|   |   |   +-- hasown
+|   |   |   |   `-- function-bind (повтор)
+|   |   |   `-- math-intrinsics
+|   |   +-- has-tostringtag
+|   |   |   `-- has-symbols (повтор)
+|   |   `-- hasown (повтор)
+|   +-- hasown (повтор)
+|   `-- mime-types
+|       `-- mime-db
++-- https-proxy-agent
+|   +-- agent-base
+|   +-- debug
+|   |   `-- ms
+|   `-- proxy-agent-negotiate
+`-- proxy-from-env
+
+Пакетов в графе axios: 28
+Циклических зависимостей нет
+Изображение графа: examples/axios.png

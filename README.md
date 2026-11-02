@@ -3,22 +3,32 @@
 CLI-инструмент для построения и визуализации графа зависимостей
 npm-пакетов (практическая работа №2, вариант 11). Данные о зависимостях
 берутся напрямую из npm registry по HTTP, без менеджеров пакетов и
-сторонних библиотек.
+сторонних библиотек. Граф выводится в виде описания на языке Graphviz,
+картинки и ASCII-дерева.
 
-Требуется Python 3.11 или новее (используется встроенный модуль
-`tomllib`). Сторонние зависимости не нужны.
+## Требования
+
+- Python 3.11 или новее (используется встроенный модуль `tomllib`),
+  сторонние Python-пакеты не нужны;
+- [Graphviz](https://graphviz.org/download/) — утилита `dot` должна
+  быть доступна в `PATH` (нужна только для картинки). На Windows:
+  `winget install --id Graphviz.Graphviz -e`, затем добавить
+  `C:\Program Files\Graphviz\bin` в `PATH`; на Linux:
+  `sudo apt install graphviz`. Проверка: `dot -V`.
 
 ## Структура
 
 | Путь | Назначение |
 |------|------------|
-| `src/main.py` | точка входа, выбор источника данных, вывод |
+| `src/main.py` | точка входа, выбор источника данных и режима вывода |
 | `src/config.py` | загрузка и проверка конфигурации TOML |
 | `src/registry.py` | получение прямых зависимостей из npm registry |
 | `src/graph_file.py` | чтение файла тестового репозитория |
 | `src/graph.py` | построение графа (DFS без рекурсии), циклы, обратные зависимости |
+| `src/render.py` | описание на Graphviz, рендер и показ картинки, ASCII-дерево |
 | `tests/` | модульные тесты (`unittest`) |
 | `tests/data/` | тестовые графы и примеры конфигураций |
+| `examples/` | результаты для трёх npm-пакетов и вывод `npm ls` |
 | `config.toml` | пример конфигурации |
 | `run.bat`, `run.sh` | скрипты запуска приложения и тестов |
 
@@ -32,9 +42,9 @@ npm-пакетов (практическая работа №2, вариант 1
 | `package` | строка | имя анализируемого пакета |
 | `repository` | строка | URL npm registry или путь к файлу тестового репозитория |
 | `test_mode` | bool | `true` — работа с тестовым репозиторием из файла |
-| `ascii_tree` | bool | `true` — выводить зависимости в виде ASCII-дерева |
+| `ascii_tree` | bool | `true` — дополнительно вывести зависимости в виде ASCII-дерева |
 | `filter_substring` | строка | пакеты, имя которых содержит подстроку, не учитываются; `""` — без фильтра |
-| `reverse_for` | строка | пакет, для которого выводятся обратные зависимости; `""` — вывести граф |
+| `reverse_for` | строка | пакет, для которого выводятся обратные зависимости; `""` — визуализировать граф |
 
 Пример (`config.toml`):
 
@@ -64,6 +74,14 @@ reverse_for = ""
   `package`, и не должен исключаться фильтром.
 
 При ошибке все найденные проблемы выводятся в stderr.
+
+## Опции командной строки
+
+| Опция | По умолчанию | Описание |
+|-------|--------------|----------|
+| `-c`, `--config` | `config.toml` | путь к конфигурационному файлу |
+| `-o`, `--output-dir` | `out` | папка для файлов `.dot` и `.png` |
+| `--no-open` | — | не открывать картинку после построения |
 
 ## Получение зависимостей из npm
 
@@ -120,12 +138,35 @@ C: D
 
 Циклы ищутся отдельным нерекурсивным DFS по построенному графу: на стеке
 лежат пары «пакет, итератор по зависимостям», и ребро в пакет, который
-ещё находится на стеке, замыкает цикл. Такие рёбра выводятся отдельно.
+ещё находится на стеке, замыкает цикл.
+
+## Визуализация
+
+Если `reverse_for` пустой, программа:
+
+1. формирует описание графа на языке Graphviz (DOT), выводит его на
+   экран и сохраняет в `<output-dir>/<пакет>.dot`; корневой пакет
+   залит голубым, рёбра, замыкающие циклы, — красные;
+2. если `ascii_tree = true`, выводит ASCII-дерево зависимостей;
+3. выводит число пакетов, циклы и исключённые фильтром пакеты;
+4. вызывает `dot -Tpng` и открывает полученную картинку
+   `<output-dir>/<пакет>.png` программой просмотра по умолчанию
+   (`os.startfile` на Windows, `open` на macOS, `xdg-open` на Linux).
+
+В имени файла символы `@` и `/` заменяются на `_`:
+`@babel/core` → `_babel_core.dot`.
+
+ASCII-дерево строится тоже без рекурсии. Каждый пакет раскрывается
+только при первой встрече; повторная встреча помечается `(повтор)`
+(аналог `deduped` у npm), а пакет, который уже стоит на пути от корня,
+помечается `(цикл)`. Используются только ASCII-символы (как в
+`npm ls --unicode=false`), поэтому вывод можно перенаправить в файл в
+любой кодировке.
 
 ## Обратные зависимости
 
-Если `reverse_for` не пустой, вместо графа выводятся пакеты, которые
-прямо или транзитивно зависят от указанного пакета:
+Если `reverse_for` не пустой, вместо визуализации выводятся пакеты,
+которые прямо или транзитивно зависят от указанного пакета:
 
 1. строится граф зависимостей корневого пакета `package` (как выше);
 2. рёбра графа разворачиваются: для каждого пакета — список пакетов,
@@ -140,13 +181,14 @@ C: D
 Если пакет входит в цикл, дополнительно выводится, что он зависит сам
 от себя. Если пакета нет в графе, выводится ошибка.
 
-### Коды возврата
+## Коды возврата
 
 | Код | Значение |
 |-----|----------|
 | 0 | успешно |
 | 1 | ошибка конфигурации |
 | 2 | ошибка получения данных или пакет `reverse_for` не входит в граф |
+| 3 | ошибка визуализации (нет Graphviz, не удалось открыть картинку) |
 
 ## Запуск
 
@@ -154,13 +196,14 @@ Windows:
 
 ```bat
 run.bat
-run.bat --config путь\к\config.toml
+run.bat --config examples\axios.toml
+run.bat --config tests\data\graph_cycle.toml --no-open
 ```
 
 Linux / macOS:
 
 ```sh
-./run.sh --config path/to/config.toml
+./run.sh --config examples/axios.toml
 ```
 
 Напрямую: `python -m src.main --config config.toml`. Без `--config`
@@ -174,8 +217,10 @@ run.bat test
 python -m unittest discover -s tests -v
 ```
 
-Тесты registry не обращаются к сети: `urlopen` подменяется через
-`unittest.mock`.
+Тесты не обращаются к сети и не открывают окна: `urlopen`, вызов `dot`
+и открытие картинки подменяются через `unittest.mock`. Один тест
+выполняет настоящий рендер, если Graphviz установлен, иначе
+пропускается.
 
 Проверка стиля (необязательно):
 
@@ -199,6 +244,7 @@ flake8 --max-line-length 80 --max-complexity 10 src tests
 | `graph_complex.toml` | `complex.txt` | большой граф с циклом |
 | `graph_complex_filter.toml` | `complex.txt` | фильтр `F` |
 | `graph_from_middle.toml` | `complex.txt` | корень в середине графа |
+| `graph_no_tree.toml` | `diamond.txt` | без ASCII-дерева |
 | `graph_missing_root.toml` | `diamond.txt` | корневого пакета нет |
 | `graph_bad_*.toml` | `bad_graph_*.txt` | ошибки формата файла |
 
@@ -206,31 +252,51 @@ flake8 --max-line-length 80 --max-complexity 10 src tests
 
 ```
 > run.bat --config tests\data\graph_cycle.toml
-Граф зависимостей A (пакетов: 3):
-  A -> B
-  B -> C
-  C -> A
+Описание графа на языке Graphviz (out/A.dot):
+digraph dependencies {
+    rankdir=LR;
+    node [shape=box, style=rounded, fontname=Helvetica];
+    "A" [style="rounded,filled", fillcolor=lightblue];
+    "A" -> "B";
+    "B" -> "C";
+    "C" -> "A" [color=red, penwidth=2];
+}
+
+ASCII-дерево зависимостей:
+A
+`-- B
+    `-- C
+        `-- A (цикл)
+
+Пакетов в графе A: 3
 Циклические зависимости (ребро, замыкающее цикл):
   C -> A
+Изображение графа: out/A.png
 ```
 
-Фильтр `F` на `complex.txt`: пакет `F` исключён, но `H` остаётся, так
-как до него есть путь A → D → H:
+Большой граф `complex.txt`: общие зависимости (`E`, `F`, `H`) и цикл
+A → C → G → A:
 
 ```
-> run.bat --config tests\data\graph_complex_filter.toml
-Граф зависимостей A (пакетов: 7):
-  A -> B, C, D
-  B -> E
-  E -> (нет)
-  C -> G
-  G -> A
-  D -> H
-  H -> E
-Циклические зависимости (ребро, замыкающее цикл):
-  G -> A
-Исключены фильтром: F
+> run.bat --config tests\data\graph_complex.toml
+...
+ASCII-дерево зависимостей:
+A
++-- B
+|   +-- E
+|   `-- F
+|       `-- H
+|           `-- E (повтор)
++-- C
+|   +-- F (повтор)
+|   `-- G
+|       `-- A (цикл)
+`-- D
+    `-- H (повтор)
 ```
+
+С фильтром `F` пакет `F` исключается, но `H` остаётся, так как до него
+есть путь A → D → H (`graph_complex_filter.toml`).
 
 Ошибка формата:
 
@@ -252,8 +318,6 @@ flake8 --max-line-length 80 --max-complexity 10 src tests
 | `reverse_complex_filter.toml` | `complex.txt` | H | фильтр `F` убирает пути через F |
 | `reverse_missing.toml` | `diamond.txt` | Z | пакета нет в графе |
 
-Ромб:
-
 ```
 > run.bat --config tests\data\reverse_diamond.toml
 Обратные зависимости D в графе A
@@ -264,8 +328,6 @@ flake8 --max-line-length 80 --max-complexity 10 src tests
   C <- A
 Зависят от D (пакетов: 3): A, B, C
 ```
-
-Цикл A → B → C → A:
 
 ```
 > run.bat --config tests\data\reverse_cycle.toml
@@ -283,50 +345,46 @@ A зависит сам от себя через цикл
 
 ```
 > run.bat --config tests\data\reverse_complex_filter.toml
-Обратные зависимости H в графе A
-(пакет <- пакеты, которые от него напрямую зависят):
-  H <- D
-  D <- A
-  A <- G
-  G <- C
-  C <- A
+...
 Зависят от H (пакетов: 4): A, C, D, G
 ```
 
-### npm registry
+### Три npm-пакета
 
-`express` с фильтром `debug` (`config.toml`):
+В `examples/` для каждого пакета лежат конфигурация (`.toml`), описание
+на Graphviz (`.dot`), полный вывод программы с ASCII-деревом (`.txt`) и
+вывод `npm ls --all --unicode=false` для сравнения (`.npm-ls.txt`).
+Картинки в репозиторий не добавляются (бинарные файлы); их строит сама
+программа или команда `dot -Tpng examples/axios.dot -o out/axios.png`.
+
+| Пакет | Пакетов в графе | Файлы |
+|-------|-----------------|-------|
+| `express` | 63 | `express.*` |
+| `axios` | 28 | `axios.*` |
+| `@babel/core` | 38 | `_babel_core.*` (scoped-имена) |
 
 ```
-> run.bat
-Загружено пакетов: 62
-Граф зависимостей express (пакетов: 62):
-  express -> accepts, body-parser, content-disposition, ...
-  accepts -> mime-types, negotiator
-  mime-types -> mime-db
-  mime-db -> (нет)
-  ...
-  send -> encodeurl, escape-html, etag, fresh, http-errors, mime-types, ms, ...
-  ms -> (нет)
-  serve-static -> encodeurl, escape-html, parseurl, send
-  vary -> (нет)
+> run.bat --config examples\axios.toml
+...
+ASCII-дерево зависимостей:
+axios
++-- follow-redirects
++-- form-data
+|   +-- asynckit
+|   +-- combined-stream
+|   |   `-- delayed-stream
+|   +-- es-set-tostringtag
+...
++-- https-proxy-agent
+|   +-- agent-base
+|   +-- debug
+|   |   `-- ms
+|   `-- proxy-agent-negotiate
+`-- proxy-from-env
+
+Пакетов в графе axios: 28
 Циклических зависимостей нет
-Исключены фильтром: debug
-```
-
-Кто в графе `express` зависит от `es-errors` (`reverse_for = "es-errors"`):
-
-```
-Обратные зависимости es-errors в графе express
-(пакет <- пакеты, которые от него напрямую зависят):
-  es-errors <- side-channel, side-channel-list, side-channel-map, ...
-  side-channel <- qs
-  qs <- express, body-parser
-  ...
-Зависят от es-errors (пакетов: 13): body-parser, call-bind-apply-helpers,
-call-bound, dunder-proto, es-object-atoms, express, get-intrinsic,
-get-proto, qs, side-channel, side-channel-list, side-channel-map,
-side-channel-weakmap
+Изображение графа: out/axios.png
 ```
 
 Ошибки конфигурации (`tests/data/bad_types.toml`):
@@ -338,6 +396,45 @@ package: ожидается строка, получено 42
 test_mode: ожидается логическое значение (true или false), получено "yes"
 ascii_tree: ожидается логическое значение (true или false), получено 1
 filter_substring: ожидается строка, получено false
+reverse_for: ожидается строка, получено []
 ```
 
 Другие ошибочные конфигурации лежат в `tests/data/bad_*.toml`.
+
+## Сравнение со штатным инструментом npm
+
+Для сравнения в пустом проекте выполнялось `npm install <пакет>` и
+`npm ls --all --unicode=false` (npm 11). Набор пакетов совпал не
+полностью:
+
+| Пакет | Только у npm | Только у dep-visualizer |
+|-------|--------------|-------------------------|
+| `express` | `media-typer`, `unpipe` | — |
+| `axios` | — | `proxy-agent-negotiate` |
+| `@babel/core` | — | — |
+
+Причины расхождений:
+
+1. **Версии.** npm для каждой зависимости выбирает версию, подходящую
+   под semver-диапазон из `package.json` родителя, а dep-visualizer
+   всегда берёт `latest`. `express` требует `type-is@^2.1.0`: npm ставит
+   2.1.0, которая зависит от `media-typer`, а в последней версии 3.0.0
+   этой зависимости уже нет. Так же `body-parser` требует
+   `raw-body@^3`: в 3.0.2 есть `unpipe`, в последней 4.0.0 — нет.
+   `axios` требует `https-proxy-agent@^5.0.1`: npm ставит 5.0.1, а в
+   последней 9.1.0 появилась зависимость `proxy-agent-negotiate`.
+2. **Одна версия на пакет.** Граф dep-visualizer хранит один узел на
+   имя пакета. npm может установить несколько версий одного пакета
+   (вложенные `node_modules`), и в `npm ls` они будут разными узлами.
+   Для трёх примеров такого не случилось.
+3. **Форма вывода.** `npm ls` показывает дерево установленных пакетов с
+   версиями и пометкой `deduped`; dep-visualizer показывает граф
+   (каждое ребро один раз), а в ASCII-дереве повторы помечает
+   `(повтор)`. Порядок детей в обоих случаях алфавитный, поэтому
+   ASCII-деревья удобно сравнивать построчно.
+4. **Типы зависимостей.** Учитываются только `dependencies`; npm 7+
+   также устанавливает `peerDependencies` (а `optionalDependencies` —
+   в зависимости от платформы), которые появились бы в `npm ls`.
+5. **Фильтр.** Пакеты, исключённые `filter_substring`, вместе с
+   поддеревом, доступным только через них, в графе отсутствуют; в
+   примерах `examples/` фильтр выключен.

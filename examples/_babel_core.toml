@@ -1,0 +1,6 @@
+package = "@babel/core"
+repository = "https://registry.npmjs.org"
+test_mode = false
+ascii_tree = true
+filter_substring = ""
+reverse_for = ""

@@ -1,6 +1,6 @@
 package = "A"
 repository = "self_loop.txt"
 test_mode = true
-ascii_tree = false
+ascii_tree = true
 filter_substring = ""
 reverse_for = ""
