@@ -195,7 +195,7 @@ class RegistryModeTest(MainTestCase):
 
     def test_registry_error(self):
         """Ошибка registry уходит в stderr со своим кодом возврата."""
-        self.setup_registry_tests()  # Изменено: вызываем окружение вместо падения с ошибкой
+        self.setup_registry_tests()
         self.fetch.side_effect = RegistryError("пакет не найден")
         code, _, errors = self.run_main("good_npm.toml")
         self.assertEqual(code, EXIT_DATA_ERROR)
