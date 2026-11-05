@@ -24,7 +24,7 @@ NPM_DEPS = {"express": ["accepts", "debug"], "accepts": [], "debug": []}
 class MainTestCase(unittest.TestCase):
     """Общая подготовка: временная папка вывода, рендер и показ подменены."""
 
-    def setUp(self):
+    def setup_tests(self):
         """Подменить вызов dot и открытие картинки, создать папку вывода."""
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
@@ -59,6 +59,7 @@ class VisualizeTest(MainTestCase):
 
     def test_diamond(self):
         """DOT-описание, ASCII-дерево и сводка."""
+        self.setup_tests()
         code, output, _ = self.run_main("good_test_mode.toml")
         self.assertEqual(code, EXIT_OK)
         self.assertIn('"A" -> "B";', output)
@@ -68,6 +69,7 @@ class VisualizeTest(MainTestCase):
 
     def test_dot_file_saved_and_rendered(self):
         """DOT-файл сохраняется в папку вывода и передаётся в dot."""
+        self.setup_tests()
         self.run_main("good_test_mode.toml")
         dot_path = self.output_dir / "A.dot"
         self.assertTrue(dot_path.is_file())
@@ -75,12 +77,14 @@ class VisualizeTest(MainTestCase):
 
     def test_no_ascii_tree(self):
         """Без ascii_tree дерево не выводится."""
+        self.setup_tests()
         _, output, _ = self.run_main("graph_no_tree.toml")
         self.assertNotIn("ASCII-дерево", output)
         self.assertIn('"A" -> "B";', output)
 
     def test_cycle(self):
         """Цикл: красное ребро, пометка в дереве и сводка."""
+        self.setup_tests()
         _, output, _ = self.run_main("graph_cycle.toml")
         self.assertIn('"C" -> "A" [color=red', output)
         self.assertIn("`-- A (цикл)", output)
@@ -88,12 +92,14 @@ class VisualizeTest(MainTestCase):
 
     def test_filter(self):
         """Исключённые пакеты не показываются и перечисляются."""
+        self.setup_tests()
         _, output, _ = self.run_main("graph_complex_filter.toml")
         self.assertIn("Исключены фильтром: F", output)
         self.assertNotIn('"F"', output)
 
     def test_image_opened(self):
         """Без --no-open картинка открывается."""
+        self.setup_tests()
         argv = [
             "--config", str(DATA_DIR / "good_test_mode.toml"),
             "--output-dir", str(self.output_dir),
@@ -104,6 +110,7 @@ class VisualizeTest(MainTestCase):
 
     def test_render_error(self):
         """Ошибка Graphviz: свой код возврата, DOT-файл уже сохранён."""
+        self.setup_tests()
         self.render.side_effect = RenderError("утилита dot не найдена")
         code, _, errors = self.run_main("good_test_mode.toml")
         self.assertEqual(code, EXIT_RENDER_ERROR)
@@ -116,18 +123,21 @@ class ErrorsTest(MainTestCase):
 
     def test_missing_root(self):
         """Корневого пакета нет в тестовом репозитории."""
+        self.setup_tests()
         code, _, errors = self.run_main("graph_missing_root.toml")
         self.assertEqual(code, EXIT_DATA_ERROR)
         self.assertIn("не найден", errors)
 
     def test_bad_graph_file(self):
         """Ошибка формата тестового файла."""
+        self.setup_tests()
         code, _, errors = self.run_main("graph_bad_syntax.toml")
         self.assertEqual(code, EXIT_DATA_ERROR)
         self.assertIn("строка 2", errors)
 
     def test_config_error(self):
         """Ошибка конфигурации."""
+        self.setup_tests()
         code, _, errors = self.run_main("bad_url.toml")
         self.assertEqual(code, EXIT_CONFIG_ERROR)
         self.assertIn("Ошибка конфигурации", errors)
@@ -139,6 +149,7 @@ class ReverseTest(MainTestCase):
 
     def test_reverse_diamond(self):
         """Вместо визуализации выводятся обратные зависимости."""
+        self.setup_tests()
         code, output, _ = self.run_main("reverse_diamond.toml")
         self.assertEqual(code, EXIT_OK)
         self.assertIn("D <- B, C", output)
@@ -147,16 +158,19 @@ class ReverseTest(MainTestCase):
 
     def test_reverse_cycle(self):
         """Пакет в цикле зависит сам от себя."""
+        self.setup_tests()
         _, output, _ = self.run_main("reverse_cycle.toml")
         self.assertIn("A зависит сам от себя через цикл", output)
 
     def test_reverse_root(self):
         """От корня никто не зависит."""
+        self.setup_tests()
         _, output, _ = self.run_main("reverse_root.toml")
         self.assertIn("не зависит ни один пакет", output)
 
     def test_reverse_missing(self):
         """Пакета для обратных зависимостей нет в графе."""
+        self.setup_tests()
         code, _, errors = self.run_main("reverse_missing.toml")
         self.assertEqual(code, EXIT_DATA_ERROR)
         self.assertIn("не входит в граф", errors)
@@ -165,13 +179,14 @@ class ReverseTest(MainTestCase):
 class RegistryModeTest(MainTestCase):
     """Запуск с npm registry (сеть подменена)."""
 
-    def setUp(self):
+    def setup_registry_tests(self):
         """Подменить загрузку зависимостей из registry."""
-        super().setUp()
+        self.setup_tests()
         self.fetch = self.start_patch("src.main.fetch_direct_deps")
 
     def test_graph_with_filter(self):
         """Фильтр из good_npm.toml убирает debug."""
+        self.setup_registry_tests()
         self.fetch.side_effect = lambda url, name: NPM_DEPS[name]
         code, output, _ = self.run_main("good_npm.toml")
         self.assertEqual(code, EXIT_OK)
@@ -180,6 +195,7 @@ class RegistryModeTest(MainTestCase):
 
     def test_registry_error(self):
         """Ошибка registry уходит в stderr со своим кодом возврата."""
+        self.setup_registry_tests()  # Изменено: вызываем окружение вместо падения с ошибкой
         self.fetch.side_effect = RegistryError("пакет не найден")
         code, _, errors = self.run_main("good_npm.toml")
         self.assertEqual(code, EXIT_DATA_ERROR)
